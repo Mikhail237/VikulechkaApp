@@ -1,0 +1,72 @@
+name: vikulechka_app
+description: Планировщик меню для Викулечки
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'  # Указываем минимальные версии SDK
+  flutter: '>=3.0.0'  # Указываем минимальную версию Flutter
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8  # Добавляем иконки iOS
+  shared_preferences: ^2.2.2
+  carousel_slider: ^5.0.0
+  flutter_staggered_grid_view: ^0.7.0
+  provider: ^6.1.1
+  animations: ^2.0.8  # Для красивых анимаций переходов
+  cached_network_image: ^3.3.1
+  intl: ^0.19.0  # Вернули версию 0.19.0 для совместимости с flutter_localizations
+  path_provider: ^2.1.1  # Для работы с файлами
+  share_plus: ^7.2.2  # Используем версию 7.2.2, которая совместима с web <0.6.0
+  flutter_animate: ^4.5.2  # Для красивых анимаций
+  pdf: ^3.10.6
+  flutter_local_notifications: ^18.0.1
+  table_calendar: ^3.0.9  # Оставляем версию, совместимую с intl 0.19.0
+  device_calendar: ^4.2.0
+  app_links: ^3.5.1
+  flutter_native_splash: ^2.2.19
+  flutter_localizations:
+    sdk: flutter
+  firebase_core: ^2.32.0
+  firebase_analytics: ^10.10.7
+  http: ^1.3.0
+  cloud_firestore: ^4.17.5  # Добавили для Firestore
+  uni_links: ^0.5.1  # Добавляем эту строку
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  test: ^1.25.15
+
+flutter:
+  uses-material-design: true  # Включаем поддержку Material Design
+  
+  fonts:
+    - family: NotoSans
+      fonts:
+        - asset: assets/fonts/NotoSans-Regular.ttf
+        - asset: assets/fonts/NotoSans-Bold.ttf
+          weight: 700
+  
+  # Указываем папки с ресурсами
+  assets:
+    - assets/fonts/
+    - assets/images/
+    - assets/images/dish_placeholder.png
+    - assets/images/borscht.png
+    - assets/images/chicken_rice.png
+    - assets/images/caesar_salad.png
+    - assets/images/carbonara.png
+    - assets/images/pancakes.png
+    - assets/images/chicken_soup.png
+    - assets/images/tiramisu.png
+    - assets/images/shchi.png
+    - assets/images/cutlets.png
+    - assets/images/cottage_cheese_casserole.png
+    - assets/images/steamed_fish.png
+    - assets/images/vegetable_rice.png
+    - assets/splash/
+    - assets/icons/app_icon.png

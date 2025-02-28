@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "239810368534",
+    "project_id": "vikulechkaappfirebase",
+    "storage_bucket": "vikulechkaappfirebase.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:239810368534:android:cfa922f4ae458701511137",
+        "android_client_info": {
+          "package_name": "com.example.vikulechka_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyARczHVfG8N2EPg2tkJUCyV9AtZG100sk8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
