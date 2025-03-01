@@ -96,7 +96,7 @@ class Recipe {
     },
   });
 
-  // Конструктор для ручного ввода
+  // Обновляем конструктор manual
   Recipe.manual({
     required this.name,
     required this.timeMinutes,
@@ -108,7 +108,21 @@ class Recipe {
     this.imagePath = 'assets/images/dish_placeholder.png',
     this.spicyLevel = 0,
     this.isFavorite = false,
-  });
+    Map<String, dynamic>? nutrients,
+  }) : nutrients = nutrients ?? const {
+    'protein': 0.0,
+    'fat': 0.0,
+    'carbs': 0.0,
+    'vitamins': {
+      'A': 0.0,
+      'C': 0.0,
+      'D': 0.0,
+    },
+    'minerals': {
+      'iron': 0.0,
+      'magnesium': 0.0
+    }
+  };
 
   @override
   String toString() => '$name: $timeMinutes минут, $calories ккал';
@@ -342,30 +356,50 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final List<ShoppingItem> _shoppingList = [];
 
   // Добавляем константы для планирования питания
-  static const double MIN_DAILY_CALORIES = 1800;
-  static const double MAX_DAILY_CALORIES = 2200;
-  static const double MIN_PROTEIN_RATIO = 0.15; // 15%
-  static const double MAX_PROTEIN_RATIO = 0.20; // 20%
-  static const double MIN_FAT_RATIO = 0.25;     // 25%
-  static const double MAX_FAT_RATIO = 0.30;     // 30%
-  static const double MIN_CARB_RATIO = 0.50;    // 50%
-  static const double MAX_CARB_RATIO = 0.60;    // 60%
-
-  // Рекомендуемые суточные нормы
   static const Map<String, double> DAILY_NUTRIENTS = {
-    'protein': 90.0,   // г (среднее между 70-110)
-    'fat': 57.5,       // г (среднее между 50-65)
-    'carbs': 290.0,    // г (среднее между 250-330)
+    'calories': {
+      'min': 1800,
+      'max': 2200,
+    },
+    'protein': {
+      'min': 70,  // г
+      'max': 110, // г
+      'ratio': {'min': 0.15, 'max': 0.20},
+    },
+    'fat': {
+      'min': 50,  // г
+      'max': 65,  // г
+      'ratio': {'min': 0.25, 'max': 0.30},
+    },
+    'carbs': {
+      'min': 250, // г
+      'max': 330, // г
+      'ratio': {'min': 0.50, 'max': 0.60},
+    },
     'vitamins': {
-      'A': 900.0,      // мкг
-      'C': 90.0,       // мг
-      'D': 15.0,       // мкг
+      'A': 900.0, // мкг
+      'C': 90.0,  // мг
+      'D': 15.0,  // мкг
     },
     'minerals': {
-      'iron': 8.0,     // мг
+      'iron': 8.0,      // мг
       'magnesium': 400.0 // мг
     }
   };
+
+  // Списки предпочтений
+  static const List<String> FAVORITE_CUISINES = [
+    'азиатская', 'японская', 'китайская', 'тайская', 'вьетнамская'
+  ];
+
+  static const List<String> FAVORITE_DESSERTS = [
+    'тирамису', 'эклеры', 'баклава', 'творожный торт'
+  ];
+
+  static const List<String> EXCLUDED_INGREDIENTS = [
+    'молоко', 'кефир', 'колбаса', 'сосиски', 'свинина',
+    'вареное мясо', 'молочные продукты'
+  ];
 
   // Добавляем списки продуктов по категориям
   static const Map<ProductCategory, List<String>> PRODUCT_CATEGORIES = {
@@ -390,12 +424,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     ]
   };
 
+  // Добавляем контроллер для анимации
+  late AnimationController _timerAnimationController;
+  Timer? _activeTimer;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     _initNotifications();
     _loadInitialData();
+    _timerAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+  }
+
+  @override
+  void dispose() {
+    _timerAnimationController.dispose();
+    _activeTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -407,10 +456,26 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           secondary: kMediumPurple,
           surface: kLightPurple,
         ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: kPrimaryColor,
+          elevation: 0,
+        ),
+        tabBarTheme: TabBarTheme(
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          indicator: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: kGoldAccent, width: 3),
+            ),
+          ),
+        ),
       ),
       child: Scaffold(
         appBar: AppBar(
-          title: Text(_getGreeting()),
+          title: Text(_getGreeting())
+            .animate()
+            .fadeIn(duration: 600.ms)
+            .slideX(begin: -0.2, end: 0),
           bottom: TabBar(
             controller: _tabController,
             tabs: const [
@@ -462,15 +527,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       );
     }
 
-    return StaggeredGridView.countBuilder(
-      padding: const EdgeInsets.all(8),
-      crossAxisCount: 2,
-      itemCount: _favoriteRecipes.length,
-      itemBuilder: (context, index) => _buildRecipeCard(_favoriteRecipes[index]),
-      staggeredTileBuilder: (index) => const StaggeredTile.fit(1),
-      mainAxisSpacing: 8,
-      crossAxisSpacing: 8,
-    ).animate().fadeIn(duration: 600.ms);
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: StaggeredGrid.count(
+        crossAxisCount: 2,
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+        children: _favoriteRecipes.map((recipe) {
+          return StaggeredGridTile.fit(
+            crossAxisCellCount: 1,
+            child: _buildRecipeCard(recipe),
+          );
+        }).toList(),
+      ).animate().fadeIn(duration: 600.ms),
+    );
   }
 
   void _toggleFavorite(Recipe recipe) {
@@ -525,6 +595,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildRecipeCard(Recipe recipe) {
     return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(15),
@@ -538,44 +610,60 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ],
           ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
-                  child: Image.asset(
-                    recipe.imagePath,
-                    height: 150,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-                Container(
-                  height: 150,
-                  decoration: BoxDecoration(
+        child: InkWell(
+          onTap: () => _showRecipeDetails(context, recipe),
+          borderRadius: BorderRadius.circular(15),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Stack(
+                children: [
+                  ClipRRect(
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        kPrimaryColor.withOpacity(0.3),
-                      ],
+                    child: Image.asset(
+                      recipe.imagePath,
+                      height: 150,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
                     ),
                   ),
-                ),
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Row(
-                    children: [
-                      if (recipe.isFavorite)
-                        const Text('✨', 
-                          style: TextStyle(
-                            fontSize: 24,
-                            color: kGoldAccent,
+                  Container(
+                    height: 150,
+                    decoration: BoxDecoration(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          kPrimaryColor.withOpacity(0.3),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Row(
+                      children: [
+                        if (recipe.isFavorite)
+                          const Text('✨', 
+                            style: TextStyle(
+                              fontSize: 24,
+                              color: kGoldAccent,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black26,
+                                  blurRadius: 4,
+                                  offset: Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                          ),
+                        Text(
+                          '🌶️' * recipe.spicyLevel,
+                          style: const TextStyle(
+                            fontSize: 20,
                             shadows: [
                               Shadow(
                                 color: Colors.black26,
@@ -585,48 +673,47 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             ],
                           ),
                         ),
-                      Text(
-                        '🌶️' * recipe.spicyLevel,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          shadows: [
-                            Shadow(
-                              color: Colors.black26,
-                              blurRadius: 4,
-                              offset: Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    recipe.name,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: kPrimaryColor,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${recipe.calories} ккал • ${recipe.timeMinutes} мин',
-                    style: TextStyle(
-                      color: kPrimaryColor.withOpacity(0.7),
+                      ],
                     ),
                   ),
                 ],
               ),
-            ),
-          ],
+              Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      recipe.name,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: kPrimaryColor,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.timer, size: 16, color: kPrimaryColor.withOpacity(0.7)),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${recipe.timeMinutes} мин',
+                          style: TextStyle(color: kPrimaryColor.withOpacity(0.7)),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(Icons.local_fire_department, size: 16, color: kPrimaryColor.withOpacity(0.7)),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${recipe.calories} ккал',
+                          style: TextStyle(color: kPrimaryColor.withOpacity(0.7)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     ).animate()
@@ -647,117 +734,119 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               enlargeCenterPage: true,
               autoPlay: true,
               autoPlayInterval: const Duration(seconds: 3),
+              enlargeStrategy: CenterPageEnlargeStrategy.height,
             ),
-            items: _recipes.map((recipe) {
-              return Builder(
-                builder: (BuildContext context) {
-                  return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 5),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(15),
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          kPrimaryColor.withOpacity(0.7),
-                          kMediumPurple.withOpacity(0.9),
-                        ],
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: kPrimaryColor.withOpacity(0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(15),
-                      child: Stack(
-                        children: [
-                          Image.asset(
-                            recipe.imagePath,
-                            height: 200,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
-                          ),
-                          Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Colors.transparent,
-                                  kPrimaryColor.withOpacity(0.8),
-                                ],
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            bottom: 16,
-                            left: 16,
-                            right: 16,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  recipe.name,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    shadows: [
-                                      Shadow(
-                                        color: Colors.black26,
-                                        blurRadius: 4,
-                                        offset: Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    if (recipe.isFavorite)
-                                      const Text('✨',
-                                        style: TextStyle(
-                                          fontSize: 24,
-                                          color: kGoldAccent,
-                                        ),
-                                      ),
-                                    Text(
-                                      '🌶️' * recipe.spicyLevel,
-                                      style: const TextStyle(fontSize: 20),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ).animate()
-                    .fadeIn(duration: 600.ms)
-                    .scale(begin: const Offset(0.8, 0.8));
-                },
-              );
-            }).toList(),
+            items: _recipes.map((recipe) => _buildCarouselItem(recipe)).toList(),
           ),
           const SizedBox(height: 16),
-          StaggeredGridView.countBuilder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 2,
-            itemCount: _recipes.length,
-            itemBuilder: (context, index) => _buildRecipeCard(_recipes[index]),
-            staggeredTileBuilder: (index) => const StaggeredTile.fit(1),
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: StaggeredGrid.count(
+              crossAxisCount: 2,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              children: _recipes.map((recipe) {
+                return StaggeredGridTile.fit(
+                  crossAxisCellCount: 1,
+                  child: _buildRecipeCard(recipe),
+                );
+              }).toList(),
+            ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildCarouselItem(Recipe recipe) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 5),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(15),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            kPrimaryColor.withOpacity(0.7),
+            kMediumPurple.withOpacity(0.9),
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: kPrimaryColor.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(15),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.asset(
+              recipe.imagePath,
+              fit: BoxFit.cover,
+            ),
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    kPrimaryColor.withOpacity(0.8),
+                  ],
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: 16,
+              left: 16,
+              right: 16,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    recipe.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      shadows: [
+                        Shadow(
+                          color: Colors.black26,
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      if (recipe.isFavorite)
+                        const Text('✨',
+                          style: TextStyle(
+                            fontSize: 24,
+                            color: kGoldAccent,
+                          ),
+                        ),
+                      Text(
+                        '🌶️' * recipe.spicyLevel,
+                        style: const TextStyle(fontSize: 20),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ).animate()
+      .fadeIn(duration: 600.ms)
+      .scale(begin: const Offset(0.8, 0.8));
   }
 
   Widget _buildPlanTab() {
@@ -930,6 +1019,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final notificationTime = DateTime.now().add(Duration(minutes: minutes));
     final scheduledDate = tz.TZDateTime.from(notificationTime, tz.local);
 
+    // Настраиваем уведомление
     await _notifications.zonedSchedule(
       recipe.hashCode,
       'Готово! 🎉',
@@ -942,114 +1032,175 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           channelDescription: 'Notifications for cooking timers',
           importance: Importance.high,
           priority: Priority.high,
-          sound: RawResourceAndroidNotificationSound('timer_finish'),
+          sound: const RawResourceAndroidNotificationSound('timer_finish'),
           playSound: true,
           enableVibration: true,
           icon: '@drawable/ic_timer',
-          largeIcon: DrawableResourceAndroidBitmap('@drawable/ic_recipe'),
+          largeIcon: const DrawableResourceAndroidBitmap('@drawable/ic_recipe'),
+          fullScreenIntent: true,
+          category: AndroidNotificationCategory.alarm,
         ),
       ),
-      uiLocalNotificationDateInterpretation: 
-          UILocalNotificationDateInterpretation.absoluteTime,
-      androidAllowWhileIdle: true,
-    );
+    ),
+    uiLocalNotificationDateInterpretation: 
+        UILocalNotificationDateInterpretation.absoluteTime,
+  );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.timer, color: Colors.white),
-            const SizedBox(width: 8),
-            Text('Таймер запущен на $minutes минут для ${recipe.name}!'),
-          ],
-        ),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-        action: SnackBarAction(
-          label: 'Отмена',
-          onPressed: () {
-            _notifications.cancel(recipe.hashCode);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Таймер отменен')),
-            );
-          },
-        ),
+  // Показываем анимированный Snackbar
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Row(
+        children: [
+          Icon(Icons.timer, color: Colors.white)
+            .animate(controller: _timerAnimationController)
+            .shake(duration: 500.ms)
+            .then()
+            .shimmer(duration: 1000.ms),
+          const SizedBox(width: 8),
+          Text('Таймер запущен на $minutes минут для ${recipe.name}!')
+            .animate()
+            .fadeIn(duration: 300.ms)
+            .slideX(begin: 0.2, end: 0),
+        ],
       ),
-    );
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: kPrimaryColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+      ),
+      action: SnackBarAction(
+        label: 'Отмена',
+        textColor: Colors.white,
+        onPressed: () {
+          _notifications.cancel(recipe.hashCode);
+          _activeTimer?.cancel();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Таймер отменен')
+                .animate()
+                .fadeIn(duration: 300.ms)
+                .slideX(begin: 0.2, end: 0),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        },
+      ),
+      duration: const Duration(seconds: 4),
+    ),
+  );
+
+  // Запускаем анимацию
+  _timerAnimationController
+    ..reset()
+    ..repeat(period: const Duration(seconds: 2));
+
+  // Сохраняем активный таймер
+  _activeTimer = Timer(Duration(minutes: minutes), () {
+    _timerAnimationController.stop();
+  });
+}
+
+  // Добавляем метод расчета требуемых нутриентов
+  Map<String, dynamic> _calculateRequiredNutrients(Map<String, dynamic> current, double ratio) {
+    return {
+      'protein': DAILY_NUTRIENTS['protein']['min']! * ratio - (current['protein'] ?? 0.0),
+      'fat': DAILY_NUTRIENTS['fat']['min']! * ratio - (current['fat'] ?? 0.0),
+      'carbs': DAILY_NUTRIENTS['carbs']['min']! * ratio - (current['carbs'] ?? 0.0),
+      'vitamins': {
+        'A': DAILY_NUTRIENTS['vitamins']['A']! * ratio - ((current['vitamins'] ?? {})['A'] ?? 0.0),
+        'C': DAILY_NUTRIENTS['vitamins']['C']! * ratio - ((current['vitamins'] ?? {})['C'] ?? 0.0),
+        'D': DAILY_NUTRIENTS['vitamins']['D']! * ratio - ((current['vitamins'] ?? {})['D'] ?? 0.0),
+      },
+      'minerals': {
+        'iron': DAILY_NUTRIENTS['minerals']['iron']! * ratio - ((current['minerals'] ?? {})['iron'] ?? 0.0),
+        'magnesium': DAILY_NUTRIENTS['minerals']['magnesium']! * ratio - ((current['minerals'] ?? {})['magnesium'] ?? 0.0),
+      }
+    };
   }
 
+  // Обновляем метод генерации меню для использования требуемых нутриентов
   void _generateMonthlyMenu() {
     final monthlyPlan = <DateTime, List<Meal>>{};
     final now = DateTime.now();
     
-    // Генерируем меню на 4 недели
     for (var week = 0; week < 4; week++) {
       for (var day = 0; day < 7; day++) {
         final currentDate = now.add(Duration(days: week * 7 + day));
         final meals = <Meal>[];
         var dailyNutrients = _createEmptyNutrientsMap();
-        
-        // Завтрак (25% калорий)
-        final breakfast = _selectMeal(
-          category: RecipeCategory.breakfast,
-          targetCalories: MIN_DAILY_CALORIES * 0.25,
-          excludedRecipes: meals.map((m) => m.recipe).toList(),
-          requiredNutrients: _calculateRequiredNutrients(dailyNutrients, 0.25),
-        );
-        if (breakfast != null) {
-          meals.add(Meal(
-            recipe: breakfast,
-            date: currentDate,
-            mealTime: MealTime.breakfast,
-          ));
-          _updateDailyNutrients(dailyNutrients, breakfast.nutrients);
-        }
-        
-        // Обед (40% калорий)
-        final lunch = _selectMeal(
-          category: RecipeCategory.mainDish,
-          targetCalories: MIN_DAILY_CALORIES * 0.40,
-          excludedRecipes: meals.map((m) => m.recipe).toList(),
-          requiredNutrients: _calculateRequiredNutrients(dailyNutrients, 0.40),
-          preferSpicy: day % 2 == 0, // Чередуем острые и неострые блюда
-        );
-        if (lunch != null) {
-          meals.add(Meal(
-            recipe: lunch,
-            date: currentDate,
-            mealTime: MealTime.lunch,
-          ));
-          _updateDailyNutrients(dailyNutrients, lunch.nutrients);
-        }
-        
-        // Ужин (35% калорий)
-        final dinner = _selectMeal(
-          category: RecipeCategory.mainDish,
-          targetCalories: MIN_DAILY_CALORIES * 0.35,
-          excludedRecipes: meals.map((m) => m.recipe).toList(),
-          requiredNutrients: _calculateRequiredNutrients(dailyNutrients, 0.35),
-          preferSpicy: true, // Викулечка любит острое на ужин
-        );
-        if (dinner != null) {
-          meals.add(Meal(
-            recipe: dinner,
-            date: currentDate,
-            mealTime: MealTime.dinner,
-          ));
-          _updateDailyNutrients(dailyNutrients, dinner.nutrients);
-        }
-        
-        // Добавляем десерт, если нужны калории или питательные вещества
-        if (_needsMoreNutrients(dailyNutrients)) {
-          final dessert = _selectMeal(
-            category: RecipeCategory.dessert,
-            targetCalories: MAX_DAILY_CALORIES - _calculateTotalCalories(meals),
+        var attempts = 0;
+        const maxAttempts = 10;
+
+        while (attempts < maxAttempts && !_checkNutritionalBalance(meals.map((m) => m.recipe).toList())) {
+          meals.clear();
+          dailyNutrients = _createEmptyNutrientsMap();
+          
+          // Завтрак (25% калорий)
+          var breakfast = _selectMeal(
+            category: RecipeCategory.breakfast,
+            targetCalories: DAILY_NUTRIENTS['calories']['min'] * 0.25,
             excludedRecipes: meals.map((m) => m.recipe).toList(),
-            requiredNutrients: _calculateRequiredNutrients(dailyNutrients, 0.1),
-            preferFavorites: true,
+            requiredNutrients: _calculateRequiredNutrients(dailyNutrients, 0.25),
+            checkPreferences: true,
           );
+          
+          if (breakfast != null) {
+            meals.add(Meal(
+              recipe: breakfast,
+              date: currentDate,
+              mealTime: MealTime.breakfast,
+            ));
+            _updateDailyNutrients(dailyNutrients, breakfast.nutrients);
+          }
+
+          // Обед (40% калорий)
+          var lunch = _selectMeal(
+            category: RecipeCategory.mainDish,
+            targetCalories: DAILY_NUTRIENTS['calories']['min'] * 0.40,
+            excludedRecipes: meals.map((m) => m.recipe).toList(),
+            preferSpicy: day % 2 == 0,
+            checkPreferences: true,
+          );
+          
+          if (lunch != null) {
+            meals.add(Meal(
+              recipe: lunch,
+              date: currentDate,
+              mealTime: MealTime.lunch,
+            ));
+          }
+
+          // Ужин (35% калорий)
+          var dinner = _selectMeal(
+            category: RecipeCategory.mainDish,
+            targetCalories: DAILY_NUTRIENTS['calories']['min'] * 0.35,
+            excludedRecipes: meals.map((m) => m.recipe).toList(),
+            preferSpicy: true,
+            checkPreferences: true,
+          );
+          
+          if (dinner != null) {
+            meals.add(Meal(
+              recipe: dinner,
+              date: currentDate,
+              mealTime: MealTime.dinner,
+            ));
+          }
+
+          attempts++;
+        }
+
+        // Добавляем любимый десерт (если есть место по калориям)
+        if (_calculateTotalCalories(meals) < DAILY_NUTRIENTS['calories']['max']) {
+          var dessert = _selectMeal(
+            category: RecipeCategory.dessert,
+            targetCalories: DAILY_NUTRIENTS['calories']['max'] - _calculateTotalCalories(meals),
+            excludedRecipes: meals.map((m) => m.recipe).toList(),
+            preferFavorites: true,
+            checkPreferences: true,
+          );
+          
           if (dessert != null) {
             meals.add(Meal(
               recipe: dessert,
@@ -1058,7 +1209,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ));
           }
         }
-        
+
         monthlyPlan[currentDate] = meals;
       }
     }
@@ -1068,91 +1219,131 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       monthlyPlan.forEach((day, meals) {
         _plannedMeals.addAll(meals);
       });
-      _generateShoppingList(); // Обновляем список покупок
+      _generateShoppingList();
     });
   }
 
-  Map<String, dynamic> _createEmptyNutrientsMap() {
-    return {
-      'protein': 0.0,
-      'fat': 0.0,
-      'carbs': 0.0,
-      'vitamins': {'A': 0.0, 'C': 0.0, 'D': 0.0},
-      'minerals': {'iron': 0.0, 'magnesium': 0.0}
-    };
-  }
-
-  void _updateDailyNutrients(Map<String, dynamic> daily, Map<String, dynamic> meal) {
-    daily['protein'] += meal['protein'];
-    daily['fat'] += meal['fat'];
-    daily['carbs'] += meal['carbs'];
-    daily['vitamins']['A'] += meal['vitamins']['A'];
-    daily['vitamins']['C'] += meal['vitamins']['C'];
-    daily['vitamins']['D'] += meal['vitamins']['D'];
-    daily['minerals']['iron'] += meal['minerals']['iron'];
-    daily['minerals']['magnesium'] += meal['minerals']['magnesium'];
-  }
-
-  bool _needsMoreNutrients(Map<String, dynamic> daily) {
-    return daily['protein'] < DAILY_NUTRIENTS['protein']! ||
-           daily['carbs'] < DAILY_NUTRIENTS['carbs']! ||
-           daily['vitamins']['C'] < DAILY_NUTRIENTS['vitamins']['C']!;
-  }
-
-  Widget _buildNutrientsInfo(DateTime date) {
-    final meals = _plannedMeals.where((meal) => 
-      meal.date.year == date.year && 
-      meal.date.month == date.month && 
-      meal.date.day == date.day
-    ).toList();
-
-    final dailyNutrients = _calculateDailyNutrients(meals);
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Питательная ценность:',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: kPrimaryColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            _buildNutrientProgress('Белки', 
-              dailyNutrients['protein'], DAILY_NUTRIENTS['protein']!),
-            _buildNutrientProgress('Жиры', 
-              dailyNutrients['fat'], DAILY_NUTRIENTS['fat']!),
-            _buildNutrientProgress('Углеводы', 
-              dailyNutrients['carbs'], DAILY_NUTRIENTS['carbs']!),
-            const SizedBox(height: 8),
-            Text('Витамины и минералы:', 
-              style: TextStyle(color: kPrimaryColor)),
-            _buildVitaminInfo(dailyNutrients),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Обновляем метод определения категории продукта
-  ProductCategory _determineProductCategory(String ingredient) {
-    ingredient = ingredient.toLowerCase();
+  Recipe? _selectMeal({
+    required RecipeCategory category,
+    required double targetCalories,
+    List<Recipe> excludedRecipes = const [],
+    bool preferSpicy = false,
+    bool preferFavorites = false,
+    bool checkPreferences = false,
+    Map<String, dynamic>? requiredNutrients,
+  }) {
+    var availableRecipes = _recipes.where((recipe) {
+      if (recipe.category != category) return false;
+      if (excludedRecipes.contains(recipe)) return false;
+      
+      final minCal = targetCalories * 0.8;
+      final maxCal = targetCalories * 1.2;
+      if (recipe.calories < minCal || recipe.calories > maxCal) return false;
+      
+      if (checkPreferences && !_matchesPreferences(recipe)) return false;
+      
+      return true;
+    }).toList();
     
-    for (var entry in PRODUCT_CATEGORIES.entries) {
-      if (entry.value.any((item) => ingredient.contains(item.toLowerCase()))) {
-        return entry.key;
+    if (availableRecipes.isEmpty) return null;
+    
+    availableRecipes.sort((a, b) {
+      var comparison = 0;
+      
+      if (preferSpicy) {
+        comparison = b.spicyLevel.compareTo(a.spicyLevel);
+      }
+      
+      if (comparison == 0 && preferFavorites) {
+        if (FAVORITE_DESSERTS.any((d) => b.name.toLowerCase().contains(d.toLowerCase()))) {
+          return -1;
+        }
+        if (FAVORITE_DESSERTS.any((d) => a.name.toLowerCase().contains(d.toLowerCase()))) {
+          return 1;
+        }
+      }
+      
+      return comparison;
+    });
+    
+    return availableRecipes.first;
+  }
+
+  bool _matchesPreferences(Recipe recipe) {
+    // Проверяем исключенные ингредиенты
+    if (recipe.ingredients.any((i) => 
+      EXCLUDED_INGREDIENTS.any((e) => i.toLowerCase().contains(e.toLowerCase())))) {
+      return false;
+    }
+
+    // Для десертов проверяем список любимых
+    if (recipe.category == RecipeCategory.dessert) {
+      return FAVORITE_DESSERTS.any((d) => 
+        recipe.name.toLowerCase().contains(d.toLowerCase()));
+    }
+
+    // Проверяем азиатскую кухню
+    if (FAVORITE_CUISINES.any((c) => 
+      recipe.description.toLowerCase().contains(c.toLowerCase()))) {
+      return true;
+    }
+
+    return true;
+  }
+
+  bool _checkNutritionalBalance(List<Recipe> dayMenu) {
+    var totalNutrients = _calculateTotalNutrients(dayMenu);
+    
+    // Проверяем калории
+    if (totalNutrients['calories'] < DAILY_NUTRIENTS['calories']['min'] ||
+        totalNutrients['calories'] > DAILY_NUTRIENTS['calories']['max']) {
+      return false;
+    }
+
+    // Проверяем БЖУ
+    for (var nutrient in ['protein', 'fat', 'carbs']) {
+      var ratio = totalNutrients[nutrient] / totalNutrients['calories'];
+      if (ratio < DAILY_NUTRIENTS[nutrient]['ratio']['min'] ||
+          ratio > DAILY_NUTRIENTS[nutrient]['ratio']['max']) {
+        return false;
       }
     }
-    
-    // По умолчанию - бакалея
-    return ProductCategory.pantry;
+
+    // Проверяем витамины и минералы
+    for (var vitamin in ['A', 'C', 'D']) {
+      if (totalNutrients['vitamins'][vitamin] < DAILY_NUTRIENTS['vitamins'][vitamin]) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
-  // Обновляем метод генерации списка покупок
+  Map<String, dynamic> _calculateTotalNutrients(List<Recipe> dayMenu) {
+    Map<String, dynamic> totalNutrients = {};
+    
+    for (var recipe in dayMenu) {
+      totalNutrients['calories'] = (totalNutrients['calories'] ?? 0) + recipe.calories;
+      totalNutrients['protein'] = (totalNutrients['protein'] ?? 0) + recipe.nutrients['protein'];
+      totalNutrients['fat'] = (totalNutrients['fat'] ?? 0) + recipe.nutrients['fat'];
+      totalNutrients['carbs'] = (totalNutrients['carbs'] ?? 0) + recipe.nutrients['carbs'];
+      totalNutrients['vitamins'] = {
+        ...totalNutrients['vitamins'] ?? {},
+        ...recipe.nutrients['vitamins']
+      };
+      totalNutrients['minerals'] = {
+        ...totalNutrients['minerals'] ?? {},
+        ...recipe.nutrients['minerals']
+      };
+    }
+    
+    return totalNutrients;
+  }
+
+  int _calculateTotalCalories(List<Meal> dayMenu) {
+    return dayMenu.fold(0, (sum, meal) => sum + meal.recipe.calories);
+  }
+
   void _generateShoppingList() {
     final Map<String, ShoppingItem> uniqueItems = {};
     
@@ -1209,7 +1400,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     });
   }
 
-  // Вспомогательный метод для определения единиц измерения
+  // Обновляем метод определения единиц измерения
   String _getDefaultUnit(String ingredient, ProductCategory category) {
     switch (category) {
       case ProductCategory.produceAndFruits:
@@ -1239,5 +1430,266 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       default:
         return '1';
     }
+  }
+
+  // Обновляем метод определения категории продукта
+  ProductCategory _determineProductCategory(String ingredient) {
+    ingredient = ingredient.toLowerCase();
+    
+    for (var entry in PRODUCT_CATEGORIES.entries) {
+      if (entry.value.any((item) => ingredient.contains(item.toLowerCase()))) {
+        return entry.key;
+      }
+    }
+    
+    // По умолчанию - бакалея
+    return ProductCategory.pantry;
+  }
+
+  void _generateWeeklyMenu() {
+    final weeklyPlan = <DateTime, List<Meal>>{};
+    final now = DateTime.now();
+    
+    for (var i = 0; i < 7; i++) {
+      final day = now.add(Duration(days: i));
+      final meals = <Meal>[];
+      var dailyNutrients = _createEmptyNutrientsMap();
+
+      // Завтрак (25% калорий)
+      final breakfast = _selectMeal(
+        category: RecipeCategory.breakfast,
+        targetCalories: DAILY_NUTRIENTS['calories']['min'] * 0.25,
+        excludedRecipes: meals.map((m) => m.recipe).toList(),
+        requiredNutrients: _calculateRequiredNutrients(dailyNutrients, 0.25),
+      );
+      
+      if (breakfast != null) {
+        meals.add(Meal(
+          recipe: breakfast,
+          date: day,
+          mealTime: MealTime.breakfast,
+        ));
+        _updateDailyNutrients(dailyNutrients, breakfast.nutrients);
+      }
+
+      // Обед (40% калорий)
+      final lunch = _selectMeal(
+        category: RecipeCategory.mainDish,
+        targetCalories: DAILY_NUTRIENTS['calories']['min'] * 0.40,
+        excludedRecipes: meals.map((m) => m.recipe).toList(),
+        preferSpicy: i % 2 == 0,
+        requiredNutrients: _calculateRequiredNutrients(dailyNutrients, 0.40),
+      );
+      
+      if (lunch != null) {
+        meals.add(Meal(
+          recipe: lunch,
+          date: day,
+          mealTime: MealTime.lunch,
+        ));
+        _updateDailyNutrients(dailyNutrients, lunch.nutrients);
+      }
+
+      // Ужин (35% калорий)
+      final dinner = _selectMeal(
+        category: RecipeCategory.mainDish,
+        targetCalories: DAILY_NUTRIENTS['calories']['min'] * 0.35,
+        excludedRecipes: meals.map((m) => m.recipe).toList(),
+        preferSpicy: true,
+        requiredNutrients: _calculateRequiredNutrients(dailyNutrients, 0.35),
+      );
+      
+      if (dinner != null) {
+        meals.add(Meal(
+          recipe: dinner,
+          date: day,
+          mealTime: MealTime.dinner,
+        ));
+        _updateDailyNutrients(dailyNutrients, dinner.nutrients);
+      }
+
+      weeklyPlan[day] = meals;
+    }
+
+    setState(() {
+      _plannedMeals.clear();
+      _plannedMeals.addAll(weeklyPlan.values.expand((e) => e).toList());
+      _generateShoppingList();
+    });
+  }
+
+  void _showMealPlanningDialog(DateTime selectedDay) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Планирование на ${DateFormat('dd.MM.yyyy').format(selectedDay)}'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final mealTime in MealTime.values)
+                ListTile(
+                  leading: Icon(mealTime.icon),
+                  title: Text(mealTime.title),
+                  subtitle: Text(_getMealForDateTime(selectedDay, mealTime)?.recipe.name ?? 'Не запланировано'),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: () => _showRecipeSelectionDialog(selectedDay, mealTime),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              _buildNutrientsInfo(selectedDay),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Закрыть'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _removePlannedMeal(int index) {
+    setState(() {
+      _plannedMeals.removeAt(index);
+      _generateShoppingList();
+    });
+  }
+
+  Recipe? _selectMeal({
+    required RecipeCategory category,
+    required double targetCalories,
+    List<Recipe> excludedRecipes = const [],
+    bool preferSpicy = false,
+    Map<String, dynamic>? requiredNutrients,
+  }) {
+    final availableRecipes = _recipes.where((recipe) {
+      if (recipe.category != category) return false;
+      if (excludedRecipes.contains(recipe)) return false;
+      
+      final minCal = targetCalories * 0.8;
+      final maxCal = targetCalories * 1.2;
+      if (recipe.calories < minCal || recipe.calories > maxCal) return false;
+      
+      if (requiredNutrients != null) {
+        // Проверяем соответствие требуемым питательным веществам
+        if (recipe.nutrients['protein'] < requiredNutrients['protein']) return false;
+        if (recipe.nutrients['fat'] < requiredNutrients['fat']) return false;
+        if (recipe.nutrients['carbs'] < requiredNutrients['carbs']) return false;
+      }
+      
+      return true;
+    }).toList();
+
+    if (availableRecipes.isEmpty) return null;
+
+    availableRecipes.sort((a, b) {
+      if (preferSpicy) {
+        return b.spicyLevel.compareTo(a.spicyLevel);
+      }
+      return 0;
+    });
+
+    return availableRecipes.first;
+  }
+
+  Map<String, dynamic> _calculateRequiredNutrients(Map<String, dynamic> current, double ratio) {
+    return {
+      'protein': DAILY_NUTRIENTS['protein']['min']! * ratio - (current['protein'] ?? 0.0),
+      'fat': DAILY_NUTRIENTS['fat']['min']! * ratio - (current['fat'] ?? 0.0),
+      'carbs': DAILY_NUTRIENTS['carbs']['min']! * ratio - (current['carbs'] ?? 0.0),
+      'vitamins': {
+        'A': DAILY_NUTRIENTS['vitamins']['A']! * ratio - ((current['vitamins'] ?? {})['A'] ?? 0.0),
+        'C': DAILY_NUTRIENTS['vitamins']['C']! * ratio - ((current['vitamins'] ?? {})['C'] ?? 0.0),
+        'D': DAILY_NUTRIENTS['vitamins']['D']! * ratio - ((current['vitamins'] ?? {})['D'] ?? 0.0),
+      },
+      'minerals': {
+        'iron': DAILY_NUTRIENTS['minerals']['iron']! * ratio - ((current['minerals'] ?? {})['iron'] ?? 0.0),
+        'magnesium': DAILY_NUTRIENTS['minerals']['magnesium']! * ratio - ((current['minerals'] ?? {})['magnesium'] ?? 0.0),
+      }
+    };
+  }
+
+  double _calculateTotalCalories(List<Meal> meals) {
+    return meals.fold(0.0, (sum, meal) => sum + meal.recipe.calories);
+  }
+
+  Map<String, dynamic> _calculateDailyNutrients(List<Meal> meals) {
+    final nutrients = _createEmptyNutrientsMap();
+    for (final meal in meals) {
+      _updateDailyNutrients(nutrients, meal.recipe.nutrients);
+    }
+    return nutrients;
+  }
+
+  Widget _buildNutrientProgress(String name, double value, double target) {
+    final progress = value / target;
+    final color = progress < 0.8 ? Colors.red :
+                 progress > 1.2 ? Colors.orange :
+                 kPrimaryColor;
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$name: ${value.toStringAsFixed(1)} / ${target.toStringAsFixed(1)}'),
+          const SizedBox(height: 4),
+          LinearProgressIndicator(
+            value: progress.clamp(0.0, 1.5),
+            backgroundColor: Colors.grey[300],
+            color: color,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVitaminInfo(Map<String, dynamic> nutrients) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Витамины и минералы:',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: kPrimaryColor,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _buildNutrientProgress(
+              'Витамин A (мкг)',
+              nutrients['vitamins']['A'],
+              DAILY_NUTRIENTS['vitamins']['A']!,
+            ),
+            _buildNutrientProgress(
+              'Витамин C (мг)',
+              nutrients['vitamins']['C'],
+              DAILY_NUTRIENTS['vitamins']['C']!,
+            ),
+            _buildNutrientProgress(
+              'Витамин D (мкг)',
+              nutrients['vitamins']['D'],
+              DAILY_NUTRIENTS['vitamins']['D']!,
+            ),
+            _buildNutrientProgress(
+              'Железо (мг)',
+              nutrients['minerals']['iron'],
+              DAILY_NUTRIENTS['minerals']['iron']!,
+            ),
+            _buildNutrientProgress(
+              'Магний (мг)',
+              nutrients['minerals']['magnesium'],
+              DAILY_NUTRIENTS['minerals']['magnesium']!,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -57,11 +57,11 @@ class RecipeDetailsScreen extends StatelessWidget {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Theme.of(context).colorScheme.secondary,
                   foregroundColor: Colors.white,
-                ).animate()
-                  .scale(duration: 200.ms)
-                  .then()
-                  .shimmer(duration: 1000.ms),
-              ),
+                ),
+              ).animate()
+                .scale(duration: const Duration(milliseconds: 200))
+                .then()
+                .shimmer(duration: const Duration(milliseconds: 1000)),
             ),
           ],
         ),
